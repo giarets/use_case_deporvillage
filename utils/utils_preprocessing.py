@@ -22,6 +22,10 @@ def set_types(data):
     return data
 
 
+def filter_dates(data, date="2024-09-01"):
+    return data[data['date'] < date]
+
+
 def aggregate_data(df, frequency="ME"):
     """
     Aggregates total quantity and revenue at the specified time frequency.

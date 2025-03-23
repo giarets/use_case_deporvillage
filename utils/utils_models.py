@@ -7,6 +7,7 @@ import lightgbm as lgb
 from sklearn.model_selection import TimeSeriesSplit
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 
 class AbstractForecastingModel(ABC):
@@ -196,3 +197,64 @@ class LightGBMForecastingModel(AbstractForecastingModel):
             figsize=(10, 4),
         )
         plt.show()
+
+
+class SarimaForecastingModel(AbstractForecastingModel):
+
+    def initialize_model(self):
+        """
+        Ensure that the hyperparameters required for SARIMA are present.
+
+        Required hyperparameters:
+        - 'order': tuple, the (p, d, q) parameters for SARIMA.
+        - 'seasonal_order': tuple, the (P, D, Q, s) parameters for seasonal SARIMA.
+        """
+        required_params = ["order", "seasonal_order"]
+        for param in required_params:
+            if param not in self.hyperparameters:
+                raise ValueError(f"Hyperparameter '{param}' is required but missing.")
+
+        self.order = self.hyperparameters["order"]
+        self.seasonal_order = self.hyperparameters["seasonal_order"]
+        return None
+
+    def train(self, X_train, y_train):
+        """
+        Train the SARIMA model using the training data.
+
+        Parameters:
+        -----------
+        X_train : pd.DataFrame
+            Features (ignored by SARIMA, included for consistency).
+        y_train : pd.Series
+            The target time-series to train the model.
+        """
+        self.model = SARIMAX(
+            y_train,
+            order=self.order,
+            seasonal_order=self.seasonal_order,
+            enforce_stationarity=False,
+            enforce_invertibility=False,
+        ).fit(disp=False)
+
+    def predict(self, X):
+        """
+        Predict future values using the SARIMA model.
+
+        Parameters:
+        -----------
+        X : pd.DataFrame
+            Dataframe with at least a time index and target column 'y'.
+            Ignored for SARIMA as predictions are based only on the model state.
+
+        Returns:
+        --------
+        np.array
+            Predicted values for the specified time horizon.
+        """
+        if "steps_ahead" not in self.hyperparameters:
+            raise ValueError("Hyperparameter 'steps_ahead' is required for prediction.")
+
+        steps_ahead = self.hyperparameters["steps_ahead"]
+        forecast = self.model.forecast(steps=steps_ahead)
+        return forecast
