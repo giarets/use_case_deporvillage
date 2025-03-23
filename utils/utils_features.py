@@ -48,7 +48,7 @@ def features_time_related(df, frequency="D"):
     return df
 
 
-def features_lag(df, col, lags=[12], group_column="sku"):
+def features_lag(df, col, lags=[12], group_column=['brand', 'family']):
     """
     Creates lagged features for a given column within groups in a pandas DataFrame.
     """
@@ -60,7 +60,7 @@ def features_lag(df, col, lags=[12], group_column="sku"):
     return df
 
 
-def features_rolling(df, col, window_sizes, group_column="sku"):
+def features_rolling(df, col, window_sizes, group_column=['brand', 'family']):
     """
     Creates rolling features for a given column within groups in a pandas DataFrame.
     """

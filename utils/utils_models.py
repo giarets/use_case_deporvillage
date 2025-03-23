@@ -126,7 +126,7 @@ class NaiveRollingMean(AbstractForecastingModel):
         if self.hyperparameters is None or "window" not in self.hyperparameters:
             raise ValueError("Hyperparameter 'window' is required but missing.")
         self.window = self.hyperparameters["window"]
-        return f"total_revenue_mean_{self.window}w"
+        return f"total_revenue_rolling_mean_{self.window}w"
 
     def train(self, X_train, y_train):
         pass
