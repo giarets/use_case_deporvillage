@@ -1,205 +1,114 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import entropy
 
 
-class FeatureEngineeringPipeline:
+def features_time_related(df, frequency="D"):
+    """
+    Classical time related features
+    """
+    frequency = "W" if "W" in frequency else "M" if "M" in frequency else "D"
 
-    def __init__(self, df, frequency="D"):
-        self.df = df.copy()  # Work on a copy to avoid modifying the original DataFrame
-        self.frequency = frequency
-        self.df_grouped = None
-        self.df_store_features = None
-        self.df_seasonality_features = None
-        self.df_final = None
+    df["year"] = df["date"].dt.year
+    df["month_of_year"] = df["date"].dt.month
 
-    def run(self):
 
-        self.aggregate_data()
-        self.compute_store_features()
-        self.compute_seasonality_features()
+    if frequency in ["D", "W"]:
+        # Features available for both daily and weekly frequencies
+        df["week_of_year"] = df["date"].dt.isocalendar().week
 
-        self.df_final = self.df_grouped.merge(
-            self.df_store_features, on=["brand", "family", "date"], how="left"
-        ).merge(
-            self.df_seasonality_features, on=["brand", "family", "date"], how="left"
+        # Trigonometric encoding for cyclic time
+        df["sin_week_of_year"] = np.sin(2 * np.pi * df["week_of_year"] / 52).round(3)
+        df["cos_week_of_year"] = np.cos(2 * np.pi * df["week_of_year"] / 52).round(3)
+
+        df["sin_month_of_year"] = np.sin(2 * np.pi * df["month_of_year"] / 12).round(3)
+        df["cos_month_of_year"] = np.cos(2 * np.pi * df["month_of_year"] / 12).round(3)
+
+    if frequency == "D":
+        # Daily-specific features
+        df["day_of_month"] = df["date"].dt.day
+        df["week_of_month"] = (df["date"].dt.day - 1) // 7 + 1
+
+        df["sin_day_of_month"] = np.sin(2 * np.pi * df["day_of_month"] / 31).round(3)
+        df["cos_day_of_month"] = np.cos(2 * np.pi * df["day_of_month"] / 31).round(3)
+
+    if frequency == "W":
+        # Compute week_of_month for weekly data
+        df["first_day_of_month"] = df["date"] - pd.to_timedelta(
+            df["date"].dt.day - 1, unit="D"
+        )
+        df["week_of_month"] = (
+            (df["week_of_year"] - df["first_day_of_month"].dt.isocalendar().week) + 1
+        ).clip(lower=1)
+        df.drop(columns=["first_day_of_month"], inplace=True)
+
+    if frequency == "M":
+        # Monthly data only has month-related features
+        df["sin_month_of_year"] = np.sin(2 * np.pi * df["month_of_year"] / 12).round(3)
+        df["cos_month_of_year"] = np.cos(2 * np.pi * df["month_of_year"] / 12).round(3)
+    return df
+
+
+def features_lag(df, col, lags=[12], group_column="sku"):
+    """
+    Creates lagged features for a given column within groups in a pandas DataFrame.
+    """
+    for lag in lags:
+        df[f"{col}_lag_{lag}"] = df.groupby(group_column, observed=False)[col].shift(
+            lag
         )
 
-        self.compute_seasonality_change()
-        return self.df_final.sort_values(["date"])
+    return df
 
-    def aggregate_data(self):
-        """
-        Aggregates total quantity and revenue at the specified time frequency.
-        Computes:
-            - total_quantity: Total quantity sold.
-            - total_revenue: Total revenue generated.
-            - avg_pvp: weighted average PVP for each brand + family.
-        """
-        self.df["date"] = pd.to_datetime(self.df["date"])
 
-        self.df_grouped = (
-            self.df.groupby(
-                ["brand", "family", pd.Grouper(key="date", freq=self.frequency)]
-            )
-            .agg(
-                total_quantity=("quantity", "sum"),
-                total_revenue=(
-                    "quantity",
-                    lambda x: np.sum(x * self.df.loc[x.index, "pvp"]),
-                ),
-            )
-            .reset_index()
-        )
+def features_rolling(df, col, window_sizes, group_column="sku"):
+    """
+    Creates rolling features for a given column within groups in a pandas DataFrame.
+    """
+    for window in window_sizes:
+        df[f"{col}_rolling_mean_{window}w"] = df.groupby(group_column, observed=False)[
+            col
+        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).mean())
+        df[f"{col}_rolling_std_{window}w"] = df.groupby(group_column, observed=False)[
+            col
+        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).std())
+        df[f"{col}_rolling_sum_{window}w"] = df.groupby(group_column, observed=False)[
+            col
+        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).sum())
+        # df[f'{col}_rolling_sum_{window}w'] = df.groupby('sku', observed=False)[col].transform(lambda x: x.shift(13).rolling(window, min_periods=1).min())
+        # df[f'{col}_rolling_sum_{window}w'] = df.groupby('sku', observed=False)[col].transform(lambda x: x.shift(13).rolling(window, min_periods=1).max())
+    return df
 
-        self.df_grouped["avg_pvp"] = (
-            self.df_grouped["total_revenue"] / self.df_grouped["total_quantity"]
-        )
-        return self.df_grouped
 
-    def compute_store_features(self):
-        """
-        num_stores: Computes the number of unique stores selling a brand-family combination.
-            This helps track how widely distributed sales are across different stores.
+def create_periods_feature(df, group_col, date_col, target_col):
+    """
+    Create a new feature 'feature_periods' that counts the number of weeks since
+    the first non-zero signal for each group, based on the row order.
 
-        store_sales_concentration:
-            To understand whether sales are concentrated in a few stores or evenly
-            distributed, we can use Shannon Entropy:
-                - If entropy is high, sales are evenly distributed across stores.
-                - If entropy is low, sales are concentrated in a few stores.
+    Parameters:
+    - df: pandas DataFrame
+    - coll_agg: key of the dataframe (excluding date)
+    - date_column: the column containing dates
+    - target_col: the column used to start counting when its value is greater than 0
 
-        avg_sales_per_store:
-            To capture how much each store contributes on average.
+    Returns:
+    - pandas DataFrame with new column feature_periods
+    """
 
-        top_store_sales:
-            To capture dominance of the most important store:
-            Computes the total sales from the top-performing store.
+    df = df.sort_values(by=group_col + [date_col])
 
-        top_3_store_sales_ratio:
-            Instead of just the top store, we can analyze the combined share of the top 3 stores.
+    # Create a mask to indicate rows where the signal_col is greater than 0
+    df["signal_above_zero"] = df[target_col] > 0
 
-        top_store_sales_ratio:
-            To capture dominance of the most important store:
-            Computes the ratio of sales from the top-performing store.
-                - If the ratio is close to 1, a single store dominates sales.
-                - If the ratio is low, sales are more evenly distributed.
-        """
-        df_store_features = (
-            self.df.groupby(["brand", "family", "date", "store"])
-            .agg(store_sales=("quantity", "sum"))
-            .reset_index()
-        )
+    # Group by the coll_agg and create a cumulative sum of the signal_above_zero mask
+    # Start counting periods only when the signal_col is greater than 0
+    df["first_nonzero_signal"] = df.groupby(group_col)["signal_above_zero"].cumsum() > 0
 
-        df_store_features["date"] = pd.to_datetime(df_store_features["date"])
+    # Count periods only where the signal has been greater than zero
+    df["feature_periods"] = df.groupby(group_col).cumcount() + 1
+    df["feature_periods"] = df["feature_periods"].where(df["first_nonzero_signal"], 0)
 
-        self.df_store_features = (
-            df_store_features.groupby(
-                ["brand", "family", pd.Grouper(key="date", freq=self.frequency)]
-            )
-            .agg(
-                num_stores=("store", "nunique"),
-                store_sales_concentration=(
-                    "store_sales",
-                    lambda x: entropy(x / x.sum()) if len(x) > 1 else 0,
-                ),
-                avg_sales_per_store=("store_sales", "mean"),
-                top_store_sales=("store_sales", "max"),
-                top_3_store_sales=("store_sales", lambda x: x.nlargest(3).sum()),
-                top_store_sales_ratio=(
-                    "store_sales",
-                    lambda x: x.max() / x.sum() if x.sum() > 0 else 0,
-                ),
-            )
-            .reset_index()
-        )
+    df["feature_periods"] = df["feature_periods"].astype("float64")
+    df = df.reset_index(drop=True)
+    df = df.drop(columns=["signal_above_zero", "first_nonzero_signal"])
 
-        self.df_store_features["avg_sales_per_store"] = self.df_store_features[
-            "avg_sales_per_store"
-        ].round(2)
-        self.df_store_features["store_sales_concentration"] = self.df_store_features[
-            "store_sales_concentration"
-        ].round(2)
-        return self.df_store_features
-
-    def compute_seasonality_features(self):
-        """
-        seasonality_sales_concentration:
-            Similar to store entropy, we can measure how spread out seasonality types are.
-            Higher entropy → sales spread across multiple seasonality types.
-
-        mode_seasonality:
-            To track the dominant season for a given brand-family-date.
-
-        seasonality_change:
-            Computes how frequently seasonality changes over time.
-                - A high value means frequent changes in dominant seasonality.
-                - A low value means consistency in seasonality trends.
-
-        seasonality_ratios:
-            Computes the proportion of sales attributed to each seasonality type.
-        """
-
-        df_seasonality_features = (
-            self.df.groupby(["brand", "family", "date", "seasonality"])
-            .agg(season_sales=("quantity", "sum"))
-            .reset_index()
-        )
-
-        df_seasonality_features["date"] = pd.to_datetime(
-            df_seasonality_features["date"]
-        )
-
-        # Compute seasonality ratios
-        df_pivot = df_seasonality_features.pivot_table(
-            index=["brand", "family", "date"],
-            columns="seasonality",
-            values="season_sales",
-            aggfunc="sum",
-            fill_value=0,
-        )
-
-        df_pivot = df_pivot.div(df_pivot.sum(axis=1), axis=0).fillna(0)
-        df_pivot.columns = [f"seasonality_ratio_{col}" for col in df_pivot.columns]
-
-        self.df_seasonality_features = (
-            df_seasonality_features.groupby(
-                ["brand", "family", pd.Grouper(key="date", freq=self.frequency)]
-            )
-            .agg(
-                seasonality_sales_concentration=(
-                    "season_sales",
-                    lambda x: entropy(x / x.sum()) if x.sum() > 0 and len(x) > 1 else 0,
-                )
-            )
-            .reset_index()
-        )
-
-        mode_seasonality_df = (
-            df_seasonality_features.groupby(["brand", "family", "date"])
-            .apply(self._most_frequent_seasonality)
-            .reset_index(name="mode_seasonality")
-        )
-
-        self.df_seasonality_features = self.df_seasonality_features.merge(
-            mode_seasonality_df, on=["brand", "family", "date"], how="left"
-        ).merge(df_pivot.reset_index(), on=["brand", "family", "date"], how="left")
-
-        return self.df_seasonality_features
-
-    def compute_seasonality_change(self):
-        """Computes how frequently seasonality changes over time."""
-
-        if self.df_final is not None:
-            self.df_final["seasonality_change"] = (
-                self.df_final.groupby(["brand", "family"])["mode_seasonality"]
-                .apply(lambda x: x.ne(x.shift()).astype(int))
-                .reset_index(drop=True)
-            )
-        return self.df_final
-
-    @staticmethod
-    def _most_frequent_seasonality(group):
-        """Returns the seasonality with the highest total sales."""
-
-        counts = group.groupby("seasonality")["season_sales"].sum()
-        return counts.idxmax() if len(counts) > 0 else "N-A"
+    return df
