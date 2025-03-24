@@ -76,7 +76,7 @@ In principle we have 2 possible approaches:
 1.	Aggregate historical quantity sold at (brand, family, date).
 2.	Predict total quantity for the future period. Target Variable: total_quantity per brand/family for the forecast period.
 3.	Convert to revenue using an estimated PVP per (brand, family), such as a Weighted PVP based on sales distribution:
-$$\text{avg\_pvp} = \frac{\sum (\text{quantity} \times \text{pvp})}{\sum \text{quantity}}$$
+$$\text{AvgPvp} = \frac{\sum (\text{quantity} \times \text{pvp})}{\sum \text{quantity}}$$
 
 - Pros:  
 	•	More granular, allowing adjustments based on price changes.  
