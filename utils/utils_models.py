@@ -326,6 +326,14 @@ class ExponentialSmoothingForecastingModel(AbstractForecastingModel):
 
 
 class HierarchicalModel:
+    """ 
+    - Aggregate data using timestamp date (could be any frequency)
+    - Computes historical proportions between the global time series
+      and the brand-family time series
+    - Forecast the global time series 12 steps ahead
+    - Redistribute the global forecast at the brand-family level
+      using historical proportions
+    """
 
     def __init__(self, forecasting_model, hyperparameters=None):
         self.forecasting_model = forecasting_model
@@ -349,7 +357,6 @@ class HierarchicalModel:
 
     def compute_proportions_with_historical_data(self, train_data):
 
-        # Aggregate by date
         df_revenue_agg = (
             train_data.groupby("date")[self.target_column].sum().reset_index()
         )
@@ -357,7 +364,6 @@ class HierarchicalModel:
             columns={self.target_column: f"{self.target_column}_agg"}, inplace=True
         )
 
-        # Merge and calculate the proportion
         df_proportions = train_data.merge(df_revenue_agg, on="date")
 
         df_proportions["proportion"] = (
@@ -413,7 +419,12 @@ class HierarchicalModel:
         df_predictions["forecast_revenue"] = (
             df_predictions["forecast_total_revenue"] * df_predictions["proportion"]
         )
+        df_predictions["forecast_revenue"] = df_predictions["forecast_revenue"].round(2)
         df_predictions = df_predictions[["date", "brand", "family", "forecast_revenue"]]
 
         df_predictions = df_predictions.fillna(0)
         return df_predictions
+    
+    def evaluate(self, y_pred, y_test):
+        rmse = round(np.sqrt(mean_squared_error(y_test, y_pred)), 3)
+        return rmse
