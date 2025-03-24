@@ -52,11 +52,14 @@ def features_lag(df, col, lags=[12], group_column=['brand', 'family']):
     """
     Creates lagged features for a given column within groups in a pandas DataFrame.
     """
-    for lag in lags:
-        df[f"{col}_lag_{lag}"] = df.groupby(group_column, observed=False)[col].shift(
-            lag
-        )
-
+    if group_column is None or group_column == []:
+        for lag in lags:
+            df[f"{col}_lag_{lag}"] = df[col].shift(lag)
+    else:
+        for lag in lags:
+            df[f"{col}_lag_{lag}"] = df.groupby(group_column, observed=False)[col].shift(
+                lag
+            )
     return df
 
 

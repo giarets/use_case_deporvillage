@@ -1,0 +1,28 @@
+[project]
+name = "use-case-deporvillage"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "giarets",email = "matteo.giaretti@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pandas (>=2.2.3,<3.0.0)",
+    "numpy (>=2.2.4,<3.0.0)",
+    "statsmodels (>=0.14.4,<0.15.0)",
+    "scikit-learn (>=1.6.1,<2.0.0)",
+    "lightgbm (>=4.6.0,<5.0.0)",
+    "ipykernel (>=6.29.5,<7.0.0)",
+    "pyarrow (>=19.0.1,<20.0.0)",
+    "fastparquet (>=2024.11.0,<2025.0.0)",
+    "seaborn (>=0.13.2,<0.14.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false

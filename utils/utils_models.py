@@ -8,6 +8,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from lightgbm import LGBMRegressor
 from sklearn.metrics import mean_squared_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
 class AbstractForecastingModel(ABC):
@@ -258,3 +259,96 @@ class SarimaForecastingModel(AbstractForecastingModel):
         steps_ahead = self.hyperparameters["steps_ahead"]
         forecast = self.model.forecast(steps=steps_ahead)
         return forecast
+    
+
+class ExponentialSmoothingForecastingModel(AbstractForecastingModel):
+    def initialize_model(self):
+        """
+        Ensure that the hyperparameters required for Exponential Smoothing are present.
+
+        Required hyperparameters:
+        - 'trend': str or None, type of trend component ('add', 'mul', or None).
+        - 'seasonal': str or None, type of seasonal component ('add', 'mul', or None).
+        - 'seasonal_periods': int, the number of periods in a season.
+        """
+        required_params = ["trend", "seasonal", "seasonal_periods"]
+        for param in required_params:
+            if param not in self.hyperparameters:
+                raise ValueError(f"Hyperparameter '{param}' is required but missing.")
+
+        self.trend = self.hyperparameters["trend"]
+        self.seasonal = self.hyperparameters["seasonal"]
+        self.seasonal_periods = self.hyperparameters["seasonal_periods"]
+        return None
+
+    def train(self, X_train, y_train):
+        """
+        Train the Exponential Smoothing model using the training data.
+
+        Parameters:
+        -----------
+        X_train : pd.DataFrame
+            Features (ignored by Exponential Smoothing, included for consistency).
+        y_train : pd.Series
+            The target time-series to train the model.
+        """
+        self.model = ExponentialSmoothing(
+            y_train,
+            trend=self.trend,
+            seasonal=self.seasonal,
+            seasonal_periods=self.seasonal_periods,
+        ).fit()
+
+    def predict(self, X):
+        """
+        Predict future values using the Exponential Smoothing model.
+
+        Parameters:
+        -----------
+        X : pd.DataFrame
+            Dataframe with at least a time index and target column 'y'.
+            Ignored for Exponential Smoothing as predictions are based only on the model state.
+
+        Returns:
+        --------
+        np.array
+            Predicted values for the specified time horizon.
+        """
+        if "steps_ahead" not in self.hyperparameters:
+            raise ValueError("Hyperparameter 'steps_ahead' is required for prediction.")
+
+        steps_ahead = self.hyperparameters["steps_ahead"]
+        forecast = self.model.forecast(steps=steps_ahead)
+        return forecast
+
+
+class HierarchicalModel(AbstractForecastingModel):
+
+    def initialize_model(self):
+        return LGBMRegressor(**self.hyperparameters)
+
+    @staticmethod
+    def compute_proportions(data):
+        # Compute proportions with historical data
+
+        # Step 2: Aggregate total revenue by date
+        df_revenue_agg = data.groupby('date')['total_revenue'].sum().reset_index()
+        df_revenue_agg.rename(columns={'total_revenue': 'total_revenue_agg'}, inplace=True)
+
+        # Step 3: Merge to calculate proportions
+        df_proportions = data.merge(df_revenue_agg, on='date')
+
+        # Step 4: Calculate the proportion for each brand/family
+        df_proportions['proportion'] = (
+            df_proportions['total_revenue'] / df_proportions['total_revenue_agg']
+        )
+
+        # Final DataFrame with proportions
+        df_proportions = df_proportions[['date', 'brand', 'family', 'proportion']]
+
+        # Combine all the monthly proportions into a single DataFrame
+        df_proportions['month'] = df_proportions['date'].dt.month
+        df_proportions = df_proportions.drop(columns='date')
+        df_proportions = df_proportions.groupby(['brand', 'family', 'month'], as_index=False).agg({'proportion': 'mean'})
+        return df_proportions
+    
