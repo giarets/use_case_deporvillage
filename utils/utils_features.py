@@ -11,7 +11,6 @@ def features_time_related(df, frequency="D"):
     df["year"] = df["date"].dt.year
     df["month_of_year"] = df["date"].dt.month
 
-
     if frequency in ["D", "W"]:
         # Features available for both daily and weekly frequencies
         df["week_of_year"] = df["date"].dt.isocalendar().week
@@ -48,7 +47,7 @@ def features_time_related(df, frequency="D"):
     return df
 
 
-def features_lag(df, col, lags=[12], group_column=['brand', 'family']):
+def features_lag(df, col, lags=[12], group_column=["brand", "family"]):
     """
     Creates lagged features for a given column within groups in a pandas DataFrame.
     """
@@ -57,28 +56,26 @@ def features_lag(df, col, lags=[12], group_column=['brand', 'family']):
             df[f"{col}_lag_{lag}"] = df[col].shift(lag)
     else:
         for lag in lags:
-            df[f"{col}_lag_{lag}"] = df.groupby(group_column, observed=False)[col].shift(
-                lag
-            )
+            df[f"{col}_lag_{lag}"] = df.groupby(group_column, observed=False)[
+                col
+            ].shift(lag)
     return df
 
 
-def features_rolling(df, col, window_sizes, group_column=['brand', 'family']):
+def features_rolling(df, col, window_sizes, group_column=["brand", "family"]):
     """
     Creates rolling features for a given column within groups in a pandas DataFrame.
     """
     for window in window_sizes:
         df[f"{col}_rolling_mean_{window}w"] = df.groupby(group_column, observed=False)[
             col
-        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).mean())
+        ].transform(lambda x: x.shift(12).rolling(window, min_periods=1).mean())
         df[f"{col}_rolling_std_{window}w"] = df.groupby(group_column, observed=False)[
             col
-        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).std())
+        ].transform(lambda x: x.shift(12).rolling(window, min_periods=1).std())
         df[f"{col}_rolling_sum_{window}w"] = df.groupby(group_column, observed=False)[
             col
-        ].transform(lambda x: x.shift(13).rolling(window, min_periods=1).sum())
-        # df[f'{col}_rolling_sum_{window}w'] = df.groupby('sku', observed=False)[col].transform(lambda x: x.shift(13).rolling(window, min_periods=1).min())
-        # df[f'{col}_rolling_sum_{window}w'] = df.groupby('sku', observed=False)[col].transform(lambda x: x.shift(13).rolling(window, min_periods=1).max())
+        ].transform(lambda x: x.shift(12).rolling(window, min_periods=1).sum())
     return df
 
 

@@ -20,7 +20,7 @@ class AbstractForecastingModel(ABC):
         self.model = self.initialize_model()
 
     @abstractmethod
-    def initialize_model(self):
+    def initialize_model(self, *args, **kwargs):
         pass
 
     def train(self, X_train, y_train):
@@ -143,8 +143,8 @@ class NaiveRollingMean(AbstractForecastingModel):
             .last()
             .to_dict()
         )
-        X['brand_family'] = list(zip(X['brand'], X['family']))
-        result = X['brand_family'].map(last_values_per_sku).fillna(0)
+        X["brand_family"] = list(zip(X["brand"], X["family"]))
+        result = X["brand_family"].map(last_values_per_sku).fillna(0)
 
         return result.values
 
@@ -174,10 +174,13 @@ class NaiveLag(AbstractForecastingModel):
             raise ValueError(f"{self.column} is missing from input data.")
 
         last_values_per_sku = (
-            X.sort_index().groupby(self.col_group, observed=False)[self.column].last().to_dict()
+            X.sort_index()
+            .groupby(self.col_group, observed=False)[self.column]
+            .last()
+            .to_dict()
         )
-        X['brand_family'] = list(zip(X['brand'], X['family']))
-        result = X['brand_family'].map(last_values_per_sku).fillna(0)
+        X["brand_family"] = list(zip(X["brand"], X["family"]))
+        result = X["brand_family"].map(last_values_per_sku).fillna(0)
 
         return result.values
 
@@ -259,7 +262,7 @@ class SarimaForecastingModel(AbstractForecastingModel):
         steps_ahead = self.hyperparameters["steps_ahead"]
         forecast = self.model.forecast(steps=steps_ahead)
         return forecast
-    
+
 
 class ExponentialSmoothingForecastingModel(AbstractForecastingModel):
     def initialize_model(self):
@@ -322,33 +325,95 @@ class ExponentialSmoothingForecastingModel(AbstractForecastingModel):
         return forecast
 
 
-class HierarchicalModel(AbstractForecastingModel):
+class HierarchicalModel:
+
+    def __init__(self, forecasting_model, hyperparameters=None):
+        self.forecasting_model = forecasting_model
+        self.hyperparameters = hyperparameters if hyperparameters is not None else {}
+        self.col_group = ["brand", "family"]
+        self.proportions = None
+        self.df_predictions_agg = None
+        self.model_agg = self.initialize_model()
 
     def initialize_model(self):
-        return LGBMRegressor(**self.hyperparameters)
+        if self.forecasting_model == "ExponentialSmoothing":
+            return ExponentialSmoothingForecastingModel(self.hyperparameters)
+        elif self.forecasting_model == "Sarima":
+            return SarimaForecastingModel(hyperparameters=self.hyperparameters)
+        else:
+            raise ValueError(f"Model {self.forecasting_model} not supported")
 
-    @staticmethod
-    def compute_proportions(data):
-        # Compute proportions with historical data
+    @property
+    def target_column(self):
+        return "total_revenue"
 
-        # Step 2: Aggregate total revenue by date
-        df_revenue_agg = data.groupby('date')['total_revenue'].sum().reset_index()
-        df_revenue_agg.rename(columns={'total_revenue': 'total_revenue_agg'}, inplace=True)
+    def compute_proportions_with_historical_data(self, train_data):
 
-        # Step 3: Merge to calculate proportions
-        df_proportions = data.merge(df_revenue_agg, on='date')
-
-        # Step 4: Calculate the proportion for each brand/family
-        df_proportions['proportion'] = (
-            df_proportions['total_revenue'] / df_proportions['total_revenue_agg']
+        # Aggregate by date
+        df_revenue_agg = (
+            train_data.groupby("date")[self.target_column].sum().reset_index()
+        )
+        df_revenue_agg.rename(
+            columns={self.target_column: f"{self.target_column}_agg"}, inplace=True
         )
 
-        # Final DataFrame with proportions
-        df_proportions = df_proportions[['date', 'brand', 'family', 'proportion']]
+        # Merge and calculate the proportion
+        df_proportions = train_data.merge(df_revenue_agg, on="date")
 
-        # Combine all the monthly proportions into a single DataFrame
-        df_proportions['month'] = df_proportions['date'].dt.month
-        df_proportions = df_proportions.drop(columns='date')
-        df_proportions = df_proportions.groupby(['brand', 'family', 'month'], as_index=False).agg({'proportion': 'mean'})
+        df_proportions["proportion"] = (
+            df_proportions[self.target_column]
+            / df_proportions[f"{self.target_column}_agg"]
+        )
+
+        df_proportions = df_proportions[["date", "brand", "family", "proportion"]]
+
+        df_proportions["month"] = df_proportions["date"].dt.month
+        df_proportions = df_proportions.drop(columns="date")
+        df_proportions = df_proportions.groupby(
+            ["brand", "family", "month"], as_index=False
+        ).agg({"proportion": "mean"})
         return df_proportions
-    
+
+    def train(self, X_train, y_train):
+
+        self.proportions = self.compute_proportions_with_historical_data(X_train)
+        y_train_agg = X_train.groupby("date")[self.target_column].sum()
+        self.model_agg.train(X_train=None, y_train=y_train_agg)
+
+    def _predict_agg(self, X=None):
+
+        df_predictions_agg = self.model_agg.predict(None)
+        df_predictions_agg = df_predictions_agg.reset_index()
+        df_predictions_agg.columns = ["date", f"forecast_{self.target_column}"]
+        self.df_predictions_agg = df_predictions_agg
+
+    def evaluate_agg_forecast(self, test_data, plot=True):
+        self._predict_agg()
+
+        df_test_agg = test_data.groupby("date")[self.target_column].sum().reset_index()
+        df_test_agg.rename(
+            columns={self.target_column: f"{self.target_column}_agg"}, inplace=True
+        )
+
+        self.df_predictions_agg["month"] = self.df_predictions_agg["date"].dt.month
+        df = self.df_predictions_agg.merge(df_test_agg, on="date")
+        if plot:
+            df.set_index("date").sort_index().drop("month", axis=1).plot()
+        return df
+
+    def predict(self, X_test):
+
+        df_predictions = X_test.reset_index()[["date", "brand", "family"]].merge(
+            self.df_predictions_agg, on="date", how="left"
+        )
+        df_predictions = df_predictions.merge(
+            self.proportions, on=["brand", "family", "month"], how="left"
+        )
+
+        df_predictions["forecast_revenue"] = (
+            df_predictions["forecast_total_revenue"] * df_predictions["proportion"]
+        )
+        df_predictions = df_predictions[["date", "brand", "family", "forecast_revenue"]]
+
+        df_predictions = df_predictions.fillna(0)
+        return df_predictions
