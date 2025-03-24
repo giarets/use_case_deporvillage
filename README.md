@@ -152,7 +152,7 @@ Steps to Implement:
 	- Predict sales at the aggregated levels using richer historical data.  
 3.	Disaggregate Forecasts:  
 	- Split the higher-level forecasts back down to the brand-family level using historical proportions. For example:
-$\text{Brand_family_forecast} = \text{Brand_Forecast} \times \frac{\text{Brand_Family_Sales}}{\text{Brand_Total_Sales}}$  
+$\text{BrandFamilyForecast} = \text{BrandForecast} \times \frac{\text{BrandFamilySales}}{\text{BrandTotalSales}}$  
 4.	Smooth Proportions for Stability:  
 	- Use smoothed historical proportions (e.g., rolling averages) to prevent overfitting to noisy historical proportions.   
 
