@@ -34,7 +34,7 @@ class AbstractForecastingModel(ABC):
         """
 
         df_preds = df_preds.groupby(['brand', 'family'], observed=False)[['y', 'y_pred']].sum()
-        df_preds = df_preds[(df_preds['y_pred']>0.1) & (df_preds['y']>0.1)]
+        #df_preds = df_preds[(df_preds['y_pred']>0.1) & (df_preds['y']>0.1)]
 
         if metric == 'RMSE':
             error = round(np.sqrt(mean_squared_error(df_preds['y_pred'], df_preds['y'])), 2)
@@ -385,16 +385,15 @@ class HierarchicalModel:
         )
 
         df_proportions = train_data.merge(df_revenue_agg, on="date")
+        df_proportions["month"] = df_proportions["date"].dt.month
 
         df_proportions["proportion"] = (
             df_proportions[self.target_column]
             / df_proportions[f"{self.target_column}_agg"]
         )
 
-        df_proportions = df_proportions[["date", "brand", "family", "proportion"]]
+        df_proportions = df_proportions[["brand", "family", "month", "proportion"]]
 
-        df_proportions["month"] = df_proportions["date"].dt.month
-        df_proportions = df_proportions.drop(columns="date")
         df_proportions = df_proportions.groupby(
             ["brand", "family", "month"], as_index=False
         ).agg({"proportion": "mean"})
@@ -414,6 +413,7 @@ class HierarchicalModel:
         self.df_predictions_agg = df_predictions_agg
 
     def evaluate_agg_forecast(self, test_data, plot=True):
+
         self._predict_agg()
 
         df_test_agg = test_data.groupby("date")[self.target_column].sum().reset_index()
@@ -423,14 +423,17 @@ class HierarchicalModel:
 
         self.df_predictions_agg["month"] = self.df_predictions_agg["date"].dt.month
         df = self.df_predictions_agg.merge(df_test_agg, on="date")
+        
         if plot:
-            df.set_index("date").sort_index().drop("month", axis=1).plot()
+            df.set_index("date").sort_index().drop("month", axis=1).plot(title=test_data['family'].value_counts().index[0])
         return df
 
     def predict(self, X_test):
 
-        df_predictions = X_test.reset_index()[["date", "brand", "family"]].merge(
-            self.df_predictions_agg, on="date", how="left"
+        X_test = X_test.rename(columns={'month_of_year': 'month'})
+
+        df_predictions = X_test.reset_index()[["month", "brand", "family"]].merge(
+            self.df_predictions_agg, on="month", how="left"
         )
         df_predictions = df_predictions.merge(
             self.proportions, on=["brand", "family", "month"], how="left"

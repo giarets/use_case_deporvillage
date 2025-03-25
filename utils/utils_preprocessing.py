@@ -48,6 +48,20 @@ def aggregate_data(df, frequency="ME"):
     return df_grouped
 
 
+def remove_outliers(data, window_size=3, threshold=3):
+    """
+    Loop through each family and apply the Hampel filter to the 'price' and 'quantity' columns
+    """
+    families_to_filter = data['family'].value_counts().index[:100]
+
+    for family in families_to_filter:
+        df_temp = data[data['family'] == family]
+        
+        data.loc[data['family'] == family, 'pvp'] = hampel_filter(df_temp['pvp'], window_size, threshold)
+        data.loc[data['family'] == family, 'quantity'] = hampel_filter(df_temp['quantity'], window_size, threshold)
+    return data
+
+
 def hampel_filter(data, window_size=3, threshold=3):
     """
     Applies the Hampel filter to detect outliers in a time series.

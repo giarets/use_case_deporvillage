@@ -57,9 +57,9 @@ be careful with data leakage issues.
 
 Specifically this would be a hierarchical forecasting project. Hierarchical because of the
 structure of the data which could be grouped following multiple dimensions or, to say it
-differently, represented with a DAG (directed acyclic graph).  
-Items can be aggregated at the brand + family level, then into brands and then globally. 
-Or into families and the globally. Same with other categorical columns.
+differently, represented with a DAG (directed acyclic graph). Items can be aggregated at 
+the brand + family level, then into brands and then globally. Or into families and the 
+globally. Same with other categorical columns.
 
 The forecast level of aggregation is *Brand + Family*. Even if this already aggregating 
 multiple products, it still generates many intermittent time series with low volumes and
@@ -125,14 +125,15 @@ Baseline before implementing more advanced models.
 Note that in many forecasting problems these baselines might be not so easy to beat.  
 
 - NaiveLag: propagates the last observation
-- NaiveRollingMean: propagares the average of the last observations
+- NaiveRollingMean: propagates the average of the last observations
 
 ### LigthGBM
 
 Classical boosted approach.  
 It adapts well to many situations and might be good here that we have many categorical columns.  
 It might also be a good idea consideriong that the forecasting horizon is very large.  
-Unfortunately there is not a lot of data if we aggregate at the monthly level.
+This would probably outperform the other models if we were working with daily/weekly data.
+Unfortunately there are not enough samples once we aggregate at the monthly level.
 
 ### Hierarchical models
 
@@ -165,6 +166,7 @@ Multiple implementation were tested:
 
 None of the models was fine tuned and we are just analysis gross results.  
 However it looks like the hierarchical model gives the better results.  
+This was somehow expected since the aggregated forecast is the sum of multiple categories with different seasonalities.
 For a complete storytelling, please refer to the notebooks.
 
 
@@ -179,15 +181,40 @@ baila baila
 estimate will be left unsold at the end of the year? How can we minimize this?  
 
 How to Minimize Unsold Inventory:
-1.	Buffer Stock Optimization: Adjust purchase quantities to account for forecast uncertainty and incorporate safety stock levels based on historical variance.
-2.	Dynamic Reforecasting: Continuously monitor sales trends and reforecast quarterly or monthly to refine predictions.
-3.	Use Confidence Intervals: Provide the purchasing team with confidence bounds around forecasts (e.g., P90 and P10 predictions) to prepare for under or overperformance scenarios.
-4.	Collaborate with Stakeholders: Cross-verify forecasts with marketing or operational teams to factor in upcoming promotions, price changes, or external influences.
+1.	Buffer Stock Optimization: Adjust purchase quantities to account for forecast uncertainty 
+and incorporate safety stock levels based on historical variance.  
+2.	Dynamic Reforecasting: Continuously monitor sales trends and reforecast quarterly or 
+monthly to refine predictions.  
+3.	Use Confidence Intervals: Provide the purchasing team with confidence bounds around 
+forecasts (e.g., P90 and P10 predictions) to prepare for under or overperformance scenarios.  
+4.	Collaborate with Stakeholders: Cross-verify forecasts with marketing or operational 
+teams to factor in upcoming promotions, price changes, or external influences.  
 
 
 > 3. If you had the time to develop this project further, what improvements would you
 consider testing?  
 
+1.	Feature Engineering:  
+    - Include additional external variables such as economic indicators, seasonality (holidays, 
+    weather), and promotional campaigns.  
+    - Incorporate lagged features and trends at multiple granularities.  
+2.	Advanced Modeling Techniques:  
+    - Test more sophisticated forecasting models like Prophet, Neural Basis Expansion Analysis 
+    (N-BEATS), or Temporal Fusion Transformers (TFT).  
+    - Explore ensemble models combining traditional time-series techniques (e.g., SARIMAX) with 
+    machine learning models like LightGBM.  
+3.	Hyperparameter Tuning:  
+    - Use grid search or Bayesian optimization to fine-tune model parameters for better results.  
+4.	Better Hierarchical Aggregation:  
+    - Test reconciliation methods like bottom-up reconciliation, top-down reconciliation, or optimal 
+    reconciliation to ensure coherence across levels of aggregation.  
+5.	Granularity Improvements:    
+    - Assess predictions at different levels (weekly vs. monthly). While monthly aggregation was 
+    chosen for this project, weekly predictions could capture finer temporal dynamics.  
+6.	Scenario Testing:  
+    - Simulate scenarios with different sales growth rates, economic shifts, or demand shocks to 
+    evaluate model robustness.  
+ 
 
 > 4. How would you make these predictions available to the purchasing team? Please
 write a few pros and cons of every alternative proposed.  
@@ -196,7 +223,7 @@ write a few pros and cons of every alternative proposed.
 	Description: Provide a detailed Excel file with brand-family forecasts, confidence intervals, and summary statistics.
 	Pros:
 	- Easy to distribute and interpret.
-	- Requires minimal technical infrastructure.
+	- Requires minimal technical infrastructure.  
 	Cons:
 	- No interactivity or real-time updates.
 	- Stakeholders cannot adjust scenarios dynamically.
@@ -205,7 +232,7 @@ write a few pros and cons of every alternative proposed.
 	Description: Develop a dashboard to visualize forecasts, historical trends, and potential scenarios.
 	Pros:
 	- Highly interactive and visually intuitive.
-	- Enables real-time data filtering and drill-downs.
+	- Enables real-time data filtering and drill-downs.  
 	Cons:
 	- Requires some training for users.
 	- Relies on maintaining infrastructure for dashboard hosting.
@@ -226,3 +253,16 @@ you justify those numbers to the purchasing team?
 
 > 6. If there is any pandemic or economical crisis, which strategy would you propose to
 make sure the model can be adapted to it?  
+
+1.	Incorporate External Shocks:  
+    - Include macroeconomic indicators (e.g., GDP growth, unemployment rates) as input features to model external shocks.  
+2.	Adaptive Learning:  
+    - Implement online learning algorithms that can adjust weights dynamically as new data arrives.  
+    - Use shorter retraining cycles to incorporate recent trends more effectively.  
+3.	Scenario Planning:  
+    - Generate forecasts for multiple scenarios (e.g., optimistic, moderate, pessimistic).  
+    - Collaborate with stakeholders to plan purchasing budgets for each scenario.  
+4.	Diversification and Flexibility:  
+    - Encourage flexible contracts with suppliers to adjust purchasing volumes based on updated forecasts.  
+5.	Early Warning System:  
+    - Set up automated anomaly detection to quickly identify deviations in sales patterns and trigger reforecasting workflows.  
