@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import lightgbm as lgb
 from sklearn.model_selection import TimeSeriesSplit
 from lightgbm import LGBMRegressor
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
@@ -25,10 +25,25 @@ class AbstractForecastingModel(ABC):
 
     def train(self, X_train, y_train):
         self.model.fit(X_train, y_train)
+    
+    @staticmethod
+    def evaluate(df_preds, metric='RMSE'):
+        """
+        Evaluates the predictions after aggregating at the brand + family level
+        using either RMSE or MAPE.
+        """
 
-    def evaluate(self, y_pred, y_test):
-        rmse = round(np.sqrt(mean_squared_error(y_test, y_pred)), 3)
-        return rmse
+        df_preds = df_preds.groupby(['brand', 'family'], observed=False)[['y', 'y_pred']].sum()
+        df_preds = df_preds[(df_preds['y_pred']>0.1) & (df_preds['y']>0.1)]
+
+        if metric == 'RMSE':
+            error = round(np.sqrt(mean_squared_error(df_preds['y_pred'], df_preds['y'])), 2)
+        elif metric == 'MAPE':
+            error = round(mean_absolute_percentage_error(df_preds['y'], df_preds['y_pred']), 2)
+        else:
+            raise ValueError("Undefined metric")
+        return error
+        
 
     def predict(self, X):
         return self.model.predict(X)
@@ -47,7 +62,7 @@ class AbstractForecastingModel(ABC):
             self.model = loaded_data["model"]
             self.hyperparameters = loaded_data["hyperparameters"]
 
-    def cross_validate(self, df, n_splits=4):
+    def cross_validate(self, df, n_splits=4, metric='RMSE'):
         """
         Perform time-series cross-validation using TimeSeriesSplit and return average RMSE.
         If the approach is bottom-up it also outputs the aggregated RMSE.
@@ -62,7 +77,7 @@ class AbstractForecastingModel(ABC):
         Returns:
         --------
         float
-            The average Root Mean Square Error (RMSE) over all cross-validation splits.
+            The average RMSE or MAPE over all cross-validation splits.
         """
         metrics = []
         predictions_list = []
@@ -92,9 +107,6 @@ class AbstractForecastingModel(ABC):
             self.train(X_train, y_train)
             y_pred = self.predict(X_test)
 
-            score = self.evaluate(y_pred, y_test)
-            metrics.append(score)
-
             predictions_df = pd.DataFrame(
                 {
                     "date": test_data.index,
@@ -106,10 +118,13 @@ class AbstractForecastingModel(ABC):
             )
             predictions_list.append(predictions_df)
 
-        average_rmse = np.mean(metrics)
-        print(f"Average RMSE from cross-validation: {average_rmse:.4f}")
+            score = self.evaluate(predictions_df, metric=metric)
+            metrics.append(score)
 
-        return average_rmse
+        average_error = np.mean(metrics)
+        print(f"Average {metric} from cross-validation: {average_error:.4f}")
+
+        return average_error
 
 
 class NaiveRollingMean(AbstractForecastingModel):
@@ -354,6 +369,11 @@ class HierarchicalModel:
     @property
     def target_column(self):
         return "total_revenue"
+    
+    def evaluate(self, df_preds, metric):
+        error = AbstractForecastingModel.evaluate(df_preds, metric)
+        print(f"Average {metric} from cross-validation: {error:.4f}")
+        return error
 
     def compute_proportions_with_historical_data(self, train_data):
 
@@ -425,6 +445,6 @@ class HierarchicalModel:
         df_predictions = df_predictions.fillna(0)
         return df_predictions
     
-    def evaluate(self, y_pred, y_test):
-        rmse = round(np.sqrt(mean_squared_error(y_test, y_pred)), 3)
-        return rmse
+    # def evaluate(self, y_pred, y_test):
+    #     rmse = round(np.sqrt(mean_squared_error(y_test, y_pred)), 3)
+    #     return rmse

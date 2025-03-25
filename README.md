@@ -178,6 +178,12 @@ baila baila
 > 2. What error can we expect from the generated predictions? How many units do you
 estimate will be left unsold at the end of the year? How can we minimize this?  
 
+How to Minimize Unsold Inventory:
+1.	Buffer Stock Optimization: Adjust purchase quantities to account for forecast uncertainty and incorporate safety stock levels based on historical variance.
+2.	Dynamic Reforecasting: Continuously monitor sales trends and reforecast quarterly or monthly to refine predictions.
+3.	Use Confidence Intervals: Provide the purchasing team with confidence bounds around forecasts (e.g., P90 and P10 predictions) to prepare for under or overperformance scenarios.
+4.	Collaborate with Stakeholders: Cross-verify forecasts with marketing or operational teams to factor in upcoming promotions, price changes, or external influences.
+
 
 > 3. If you had the time to develop this project further, what improvements would you
 consider testing?  
@@ -185,6 +191,33 @@ consider testing?
 
 > 4. How would you make these predictions available to the purchasing team? Please
 write a few pros and cons of every alternative proposed.  
+
+- Option 1: Static Report (e.g., Excel/CSV)
+	Description: Provide a detailed Excel file with brand-family forecasts, confidence intervals, and summary statistics.
+	Pros:
+	- Easy to distribute and interpret.
+	- Requires minimal technical infrastructure.
+	Cons:
+	- No interactivity or real-time updates.
+	- Stakeholders cannot adjust scenarios dynamically.
+
+- Option 2: Interactive Dashboard (e.g., Power BI, Tableau)
+	Description: Develop a dashboard to visualize forecasts, historical trends, and potential scenarios.
+	Pros:
+	- Highly interactive and visually intuitive.
+	- Enables real-time data filtering and drill-downs.
+	Cons:
+	- Requires some training for users.
+	- Relies on maintaining infrastructure for dashboard hosting.
+
+- Option 3: Automated API Integration
+	Description: Integrate predictions into the purchasing team’s software via an API.
+	Pros:
+	- Seamless integration with operational workflows.
+	- Fully automated, reducing manual work.
+	Cons:
+	- Requires technical implementation and maintenance.
+	- May be overkill if the team does not need frequent updates.
 
 
 > 5. How would you evaluate the performance of this model in production? How would
