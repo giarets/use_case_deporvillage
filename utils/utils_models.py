@@ -25,25 +25,30 @@ class AbstractForecastingModel(ABC):
 
     def train(self, X_train, y_train):
         self.model.fit(X_train, y_train)
-    
+
     @staticmethod
-    def evaluate(df_preds, metric='RMSE'):
+    def evaluate(df_preds, metric="RMSE"):
         """
         Evaluates the predictions after aggregating at the brand + family level
         using either RMSE or MAPE.
         """
 
-        df_preds = df_preds.groupby(['brand', 'family'], observed=False)[['y', 'y_pred']].sum()
-        #df_preds = df_preds[(df_preds['y_pred']>0.1) & (df_preds['y']>0.1)]
+        df_preds = df_preds.groupby(["brand", "family"], observed=False)[
+            ["y", "y_pred"]
+        ].sum()
+        # df_preds = df_preds[(df_preds['y_pred']>0.1) & (df_preds['y']>0.1)]
 
-        if metric == 'RMSE':
-            error = round(np.sqrt(mean_squared_error(df_preds['y_pred'], df_preds['y'])), 2)
-        elif metric == 'MAPE':
-            error = round(mean_absolute_percentage_error(df_preds['y'], df_preds['y_pred']), 2)
+        if metric == "RMSE":
+            error = round(
+                np.sqrt(mean_squared_error(df_preds["y_pred"], df_preds["y"])), 2
+            )
+        elif metric == "MAPE":
+            error = round(
+                mean_absolute_percentage_error(df_preds["y"], df_preds["y_pred"]), 2
+            )
         else:
             raise ValueError("Undefined metric")
         return error
-        
 
     def predict(self, X):
         return self.model.predict(X)
@@ -62,7 +67,7 @@ class AbstractForecastingModel(ABC):
             self.model = loaded_data["model"]
             self.hyperparameters = loaded_data["hyperparameters"]
 
-    def cross_validate(self, df, n_splits=4, metric='RMSE'):
+    def cross_validate(self, df, n_splits=4, metric="RMSE"):
         """
         Perform time-series cross-validation using TimeSeriesSplit and return average RMSE.
         If the approach is bottom-up it also outputs the aggregated RMSE.
@@ -341,7 +346,7 @@ class ExponentialSmoothingForecastingModel(AbstractForecastingModel):
 
 
 class HierarchicalModel:
-    """ 
+    """
     - Aggregate data using timestamp date (could be any frequency)
     - Computes historical proportions between the global time series
       and the brand-family time series
@@ -369,7 +374,7 @@ class HierarchicalModel:
     @property
     def target_column(self):
         return "total_revenue"
-    
+
     def evaluate(self, df_preds, metric):
         error = AbstractForecastingModel.evaluate(df_preds, metric)
         print(f"Average {metric} from cross-validation: {error:.4f}")
@@ -423,14 +428,16 @@ class HierarchicalModel:
 
         self.df_predictions_agg["month"] = self.df_predictions_agg["date"].dt.month
         df = self.df_predictions_agg.merge(df_test_agg, on="date")
-        
+
         if plot:
-            df.set_index("date").sort_index().drop("month", axis=1).plot(title=test_data['family'].value_counts().index[0])
+            df.set_index("date").sort_index().drop("month", axis=1).plot(
+                title=test_data["family"].value_counts().index[0]
+            )
         return df
 
     def predict(self, X_test):
 
-        X_test = X_test.rename(columns={'month_of_year': 'month'})
+        X_test = X_test.rename(columns={"month_of_year": "month"})
 
         df_predictions = X_test.reset_index()[["month", "brand", "family"]].merge(
             self.df_predictions_agg, on="month", how="left"
@@ -447,7 +454,7 @@ class HierarchicalModel:
 
         df_predictions = df_predictions.fillna(0)
         return df_predictions
-    
+
     # def evaluate(self, y_pred, y_test):
     #     rmse = round(np.sqrt(mean_squared_error(y_test, y_pred)), 3)
     #     return rmse
