@@ -50,6 +50,7 @@ make sure the model can be adapted to it?
 
 ## Introduction
 
+### Technical overview
 Multiple approaches would be possible. In this case, since we have to make predictions a 
 year ahead, we would like to formulate it in forecasting terms: the time component will
 be taken into account without shuffling dates. Features will have lagged values and we will
@@ -59,15 +60,17 @@ Specifically this would be a hierarchical forecasting project. Hierarchical beca
 structure of the data which could be grouped following multiple dimensions or, to say it
 differently, represented with a DAG (directed acyclic graph). Items can be aggregated at 
 the brand + family level, then into brands and then globally. Or into families and the 
-globally. Same with other categorical columns.
+globally. Same with other categorical columns.  
+
+![pippo](pictures/data_structure.png)  
 
 The forecast level of aggregation is *Brand + Family*. Even if this already aggregating 
 multiple products, it still generates many intermittent time series with low volumes and
 high variance. Besides, since the data is daily, predicting a year ahead means predicting 365 days ahead.
 Which is a lot.  
-Therefore it would be better to aggregate the time dimension to weekly or monthly data.  
+Therefore it would be better to aggregate the time dimension with weekly or monthly frequency.  
 Both the weekly and monthly approaches were tested and the code is general enough to manage them.  
-The weekly approach was later discarded.  
+The weekly approach was later discarded, being it too fine for this task.  
 
 In principle we have 2 possible approaches:
 
@@ -106,7 +109,33 @@ Target Variable: $\text{total revenue} = \text{total quantity sold} × PVP$
 
 Assumes PVP is stable.   
 
-Since the price of all items is constant over time, we will directly predict the revenues.  
+Since the price of all items is constant over time, it makes sense to directly 
+predict the revenues. Note that the code is general enought to predict
+the number of items sold for each brand + family. However, since the *pvp* is 
+constant over time for each brand + family, both approaches are equivalent.  
+
+
+### Business overview
+
+Since the goal of this prediction is to generate a budget (per brand + family) for the purchasing team, it makes sense (also
+from a business perspective) to directly predict revenues.  
+
+We should consider the following trade-offs:  
+- Model accuracy: Ensuring the company doesn’t make significant errors in the overall budget allocation, as such mistakes could be financially painful.
+- Granular accuracy: Achieving accuracy at the family + brand level to avoid empty stock for specific products.
+
+These considerations directly influence the choice of evaluation metric:
+
+- RMSE (Root Mean Square Error):
+    - Penalizes large errors more heavily due to the squaring of differences, which is desirable when big deviations (e.g., underestimating revenue or overspending) carry significant cost.  
+    - However, RMSE can disproportionately emphasize large-scale time series (e.g., major brands with higher revenues), reducing the influence of smaller time series on overall performance evaluation.  
+- MAPE (Mean Absolute Percentage Error):  
+    - Provides a percentage-based error, allowing for comparison across time series with varying revenue scales (e.g., large vs. small revenue series).  
+    - However, MAPE can disproportionately penalize smaller time series or instances where actual revenues are low.  
+
+A complete evaluation would require input from the business team to better understand the company’s business model, the impact of certain choices, and its overall strategy.    
+
+In the accompanying notebooks, both metrics will be displayed; however, RMSE will be our primary focus. Generally, it’s not ideal to use multiple metrics when comparing models. In this case, we include both to observe whether any model shows a particularly wide gap between RMSE and MAPE.  
 
 
 
@@ -116,9 +145,13 @@ __Target variable__: *pvp*
 __Frequency__: *Monthly*  
 __Aggregation key__: *Brand + Family*  
 __Forecasting horizon__: *12 months*  
+__Metric__: *RMSE*
 
 
 ## Modelling
+
+The code implements multiple forecasting approaches.  
+
 ### Naive models
 
 Baseline before implementing more advanced models.  
@@ -175,7 +208,29 @@ For a complete storytelling, please refer to the notebooks.
 > 1. What metric have you used and why have you selected this particular metric? Is
 there any drawback that comes from using this metric?  
 
-baila baila
+This question has already been addressed a bit in the introduction.
+Basically I've been considering 2 metrics RMSE and MAPE.  
+Here are some considerations about pros and cons:  
+
+1.	RMSE (Root Mean Square Error)  
+    Why use RMSE?  
+        - It penalizes large errors more heavily due to the squaring of differences, which can be desirable for scenarios where big deviations (e.g., underestimating revenue or overspending) are costly.  
+        - It’s interpretable, as it’s in the same unit as the predicted variable (revenues).  
+        Drawbacks:  
+        - RMSE can give disproportionate weight to large-scale time series (e.g., big brands with higher revenue), making smaller time series less influential in overall performance evaluation.  
+        - It might not align well with relative performance for low-sales families, as absolute errors dominate.  
+2.	MAPE (Mean Absolute Percentage Error)  
+    Why use MAPE?  
+        - It gives a percentage-based error, which can help compare model performance across different time series with varying scales (large vs. small revenue series).  
+        - Useful for ensuring good relative accuracy at the brand+family level, where small brands/families matter as much as large ones.  
+    Drawbacks:  
+        - MAPE can disproportionately penalize small time series or instances where actual revenues are close to zero (division by a small number makes MAPE explode).  
+        - Less interpretable than RMSE because it’s percentage-based.  
+
+Obviously he final metric could only be decided with the business. In this case I decided to use RMSE in order to
+minimise financial issues in the budged allocation.  
+Like I previously mentioned, it would be desirable to take into account the stock levels of items with less volumes.  
+
 
 > 2. What error can we expect from the generated predictions? How many units do you
 estimate will be left unsold at the end of the year? How can we minimize this?  
