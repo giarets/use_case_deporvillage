@@ -81,7 +81,7 @@ globally. Same with other categorical columns.
 
 ![pippo](pictures/data_structure.png)  
 
-The forecast level of aggregation is *Brand + Family*. Even if this already aggregating 
+The forecast level of aggregation is *Brand + Family*. Even though this already aggregates 
 multiple products, it still generates many intermittent time series with low volumes and
 high variance. Besides, since the data is daily, predicting a year ahead means predicting 365 days ahead.
 Which is a lot.  
